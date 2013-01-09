@@ -3,7 +3,7 @@
 #
 # Usage - replace "node" by your tag and run: $ awk -f split-qbxml.awk my.xml
 #
-BEGIN { part = 0 }
+BEGIN { part = 1 }
 /<\w+Rq requestID=/ {
   rfile="Part" part ".xml"
   print $0 > rfile

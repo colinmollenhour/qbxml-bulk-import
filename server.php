@@ -8,12 +8,15 @@ $host = $_SERVER['HTTP_HOST'];
 $uri = $_SERVER['PHP_SELF'];
 define('BASE_URL', "$proto://$host$uri");
 
+date_default_timezone_set('America/New_York');
 function debug($msg) { error_log(date('c').' '.$msg."\n", 3, VAR_DIR.'/debug.log'); }
 function error($msg) { error_log(date('c').' '.$msg."\n", 3, VAR_DIR.'/error.log'); }
 
 class QBServ {
 
-  const VERSION = 'v0.1.WTF';
+  const VERSION = 'v0.9';
+
+  const STATUS_OK = 0;
 
   protected $fatalError;
   protected $config;
@@ -21,22 +24,33 @@ class QBServ {
   public function __construct()
   {
     try {
+      if ( ! extension_loaded('soap')) {
+        throw new Exception('You must have the SOAP extension installed.');
+      }
       $configPath = BP.'/config.txt';
       if ( ! is_readable($configPath)) {
         throw new Exception('Could not load config.txt');
       }
       $configStr = trim(file_get_contents($configPath));
-      list($path, $start, $end) = explode('|', $configStr);
-      if ( ! strlen($path) || ! strlen($start) || ! strlen($end)) {
-        throw new Exception('Could not parse config.txt. Expected format: /path/to/files*.xml|1|523');
+      list($jobName, $path, $start, $end) = explode('|', $configStr);
+      if ( ! strlen($jobName) || ! strlen($path) || ! strlen($start) || ! strlen($end)) {
+        throw new Exception('Could not parse config.txt. Expected format: JobName|/path/to/files*.xml|1|523');
       }
-      $this->config = (object) array('path' => $path, 'start' => $start, 'end' => $end);
+      if ( ! preg_match('/^\w+$/', $jobName)) {
+        throw new Exception('Invalid job name: '.$jobName);
+      }
+      if ( ! strpos($path, '*')) {
+        throw new Exception('Path does not contain a replacement placeholder (*).');
+      }
+      $this->config = (object) array('jobName' => $jobName, 'path' => $path, 'start' => $start, 'end' => $end);
       $path = $this->_getFile($this->config->start);
       if ( ! is_readable($path)) {
         throw new Exception("Cannot read $path.");
       }
-      $path = $this->_getFile();
-      if ( ! touch($path)) {
+      if ( ! $this->_setStatus(null)) {
+        throw new Exception("Cannot write to status file: $path");
+      }
+      if ( ! $this->_setStatus(null)) {
         throw new Exception("Cannot write to status file: $path");
       }
     } catch(Exception $e) {
@@ -48,7 +62,7 @@ class QBServ {
       }
       header('Content-Disposition: attachment; filename=qbserv.qwc');
       header('Content-Type: text/xml');
-      ?><<??>?xml version="1.0"?>
+      ?><<?php ?>?xml version="1.0"?>
 <QBWCXML>
   <AppName>QuickBooks XML Importer</AppName>
   <AppID></AppID>
@@ -59,11 +73,8 @@ class QBServ {
   <OwnerID>{90A44FB7-33D9-4815-AC85-AC86A7E7D1EB}</OwnerID>
   <FileID>{57F3B9B6-86F1-4FCC-B1FF-967DE1813D20}</FileID>
   <QBType>QBFS</QBType>
-  <Scheduler>
-    <RunEveryNMinutes>0</RunEveryNMinutes>
-  </Scheduler>
   <IsReadOnly>false</IsReadOnly>
-</QBWCXML><?
+</QBWCXML><?php
       exit;
     }
   }
@@ -195,8 +206,34 @@ XML;
     }
 
     $percent = ($this->config->end - $this->config->start) / ($this->_getStatus() - $this->config->start);
-    $percent = min(100,max(0, ceil($percent)));
+    $percent = min(100,max(1, ceil($percent)));
     debug("receiveResponseXML ($percent%):\n$params->response");
+
+    try {
+      libxml_use_internal_errors(true);
+      $xml = simplexml_load_string($params->response);
+      if ( ! $xml) {
+        $errors = array();
+        foreach (libxml_get_errors() as $error) {
+          $errors[] = $error->message;
+        }
+        throw new Exception("Response contains XML Errors:\n  ".implode("\n  ", $errors), -2);
+      }
+      if ( ! $xml->QBXMLMsgsRs instanceof SimpleXMLElement) {
+        throw new Exception("Response does not contain expected element.");
+      }
+      foreach ($xml->QBXMLMsgsRs->children() as $node) { /* @var $node SimpleXMLElement */
+        if ($node['statusCode'] != self::STATUS_OK) {
+          $errString = "{$node['requestID']} {$node['statusSeverity']} ({$node['statusCode']}): {$node['statusMessage']}\n";
+          $this->_logError($errString);
+        }
+      }
+    }
+    catch (Exception $e) {
+      $this->_setLastError($params->ticket, $e->getMessage());
+      error($e->getMessage());
+      return $this->_wrapResult(__FUNCTION__, $e->getCode());
+    }
     return $this->_wrapResult(__FUNCTION__, $percent);
   }
 
@@ -211,15 +248,15 @@ XML;
     file_put_contents($errfile, $message) or error("Could not write to $errfile");
   }
 
-  protected function _getFile($num = '-STATUS')
+  protected function _getFile($num)
   {
-    if ( ! $this->config->path) die("No path");
-    return str_replace('*', $num, $this->config->path);
+    $path = $this->config->path;
+    if ( ! $path) die("No path");
+    return str_replace('*', $num, $path);
   }
 
   protected function _wrapResult($type, $result)
   {
-    #return (object) array($type.'Response' => (object) array($type.'Result' => $result));
     $response = (object) array($type.'Result' => $result);
     debug("RESPONSE ($type) ".print_r($response, true));
     return $response;
@@ -227,12 +264,26 @@ XML;
 
   protected function _getStatus()
   {
-    return file_get_contents($this->_getFile());
+    $file = VAR_DIR.'/job-'.$this->config.'.status';
+    return file_get_contents($file);
   }
 
   protected function _setStatus($status)
   {
-    return file_put_contents($this->_getFile(), $status);
+    $file = VAR_DIR.'/job-'.$this->config->jobName.'.status';
+    if ($status === null) {
+      return touch($file);
+    }
+    return file_put_contents($file, $status);
+  }
+
+  protected function _logJobMessage($message)
+  {
+    $file = VAR_DIR.'/job-'.$this->config->jobName.'.log';
+    if ($message === null) {
+      return touch($file);
+    }
+    return file_put_contents($file, $message, FILE_APPEND); // TODO - keep file open until done
   }
 
 }
@@ -244,5 +295,5 @@ try {
   $server->handle();
 } catch (Exception $e) {
   echo $e->getMessage();
-  error(date('r')." {$e->getMessage()}\n$e");
+  error("{$e->getMessage()}\n$e");
 }
