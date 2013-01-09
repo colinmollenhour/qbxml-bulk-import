@@ -157,6 +157,7 @@ class QBServ {
     if ($params->strHCPResponse) {
       debug("New session: QBXML $params->qbXMLCountry $params->qbXMLMajorVers.$params->qbXMLMinorVers ($params->strCompanyFileName)");
       DEBUG and debug("strHCPResponse: $params->strHCPResponse");
+      file_put_contents(VAR_DIR.'/job-'.$this->config->jobName.'.version', "$params->qbXMLMajorVers.$params->qbXMLMinorVers");
     }
 
     $status = $this->_getStatus();
@@ -190,9 +191,12 @@ class QBServ {
     if (substr($this->config->path, -3) == '.gz') {
       $contents = gzdecode($contents);
     }
+    $version = file_get_contents(VAR_DIR.'/job-'.$this->config->jobName.'.version');
+    if ( ! $version) $version = '6.0';
     $onError = 'onError="continueOnError" responseData="includeNone"';
     $qbxml = <<<XML
 <?xml version="1.0" ?>
+<?qbxml version="$version"?>
 <QBXML>
   <QBXMLMsgsRq $onError>
 $contents  </QBXMLMsgsRq>
