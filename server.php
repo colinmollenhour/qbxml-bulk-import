@@ -56,6 +56,9 @@ class QBServ {
     } catch(Exception $e) {
       $this->fatalError = $e->getMessage();
     }
+    if (isset($_GET['test'])) {
+      die('<html><body>Tests passed. Download the QWC file here: <a href="'.BASE_URL.'?qwc">qbserv.qwc</a></body></html>');
+    }
     if (isset($_GET['qwc'])) {
       if ($this->fatalError) {
         die("<h3>{$this->fatalError}</h3>");
