@@ -98,8 +98,8 @@ class QBServ {
 
   public function authenticate($params)
   {
-    debug("authenticate: $params->strUsername : $params->strPassword");
-    return $this->_wrapResult(__FUNCTION__, array(md5(time().$params->strUsername.$params->strPassword), ''));
+    debug("authenticate: $params->strUserName : $params->strPassword");
+    return $this->_wrapResult(__FUNCTION__, array(md5(time().$params->strUserName.$params->strPassword), ''));
   }
 
   public function closeConnection($params)
