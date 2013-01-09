@@ -170,7 +170,7 @@ class QBServ {
 
     // Unrecognized status
     if ($part === null) {
-      $this->_setLastError($params->ticket, 'Unrecognized status: '.$status);
+      $this->_setLastError('Unrecognized status: '.print_r($status, true));
       return $this->_wrapResult(__FUNCTION__, 'NoOp');
     }
 
@@ -184,14 +184,16 @@ class QBServ {
     $file = $this->_getFile($part);
     $contents = file_get_contents($file);
     if ( ! $contents) {
-      $this->_setLastError($params->ticket, 'Could not get file contents: '.$file);
+      $this->_setLastError('Could not get file contents: '.$file);
       return $this->_wrapResult(__FUNCTION__, 'NoOp');
+    }
+    if (substr($this->config->path, -3) == '.gz') {
+      $contents = gzdecode($contents);
     }
     $this->_setStatus($part);
     $onError = 'onError="continueOnError" responseData="includeNone"';
     $qbxml = <<<XML
 <?xml version="1.0" ?>
-<?qbxml version="2.1"?>
 <QBXML>
   <QBXMLMsgsRq $onError>
 $contents  </QBXMLMsgsRq>
@@ -205,7 +207,7 @@ XML;
     $this->_checkTicket($params->ticket);
     if ($params->hresult || $params->message) {
       error("receiveResponseXML: $params->message ($params->hresult)");
-      $this->_setLastError($params->ticket, "Aborting due to received response indicating Quickbooks error: $params->message");
+      $this->_setLastError("Aborting due to received response indicating Quickbooks error: $params->message");
       return $this->_wrapResult(__FUNCTION__, -1);
     }
 
@@ -241,7 +243,7 @@ XML;
       }
     }
     catch (Exception $e) {
-      $this->_setLastError($params->ticket, $e->getMessage());
+      $this->_setLastError($e->getMessage());
       error($e->getMessage());
       return $this->_wrapResult(__FUNCTION__, $e->getCode());
     }
@@ -253,9 +255,10 @@ XML;
     if ( ! preg_match('/^\w+$/', $ticket)) die('Bad ticket.');
   }
 
-  protected function _setLastError($ticket, $message)
+  protected function _setLastError($message)
   {
-    $errfile = VAR_DIR.'/last_error-'.$ticket.'.txt';
+    debug("setLastError: $message");
+    $errfile = VAR_DIR.'/error-'.$this->config->jobName.'.txt';
     file_put_contents($errfile, $message) or error("Could not write to $errfile");
   }
 
@@ -269,7 +272,7 @@ XML;
   protected function _wrapResult($type, $result)
   {
     $response = (object) array($type.'Result' => $result);
-    debug("RESPONSE ".substr(json_encode($response, true),0,500));
+    debug("RESPONSE $type: ".substr(is_string($result) ? $result : json_encode($result, true),0,DEBUG?1000:300));
     return $response;
   }
 
@@ -307,4 +310,23 @@ try {
 } catch (Exception $e) {
   echo $e->getMessage();
   error("{$e->getMessage()}\n$e");
+}
+
+function gzdecode($data) {
+  // check if filename field is set in FLG, is 4th byte
+  $hex = bin2hex($data);
+  $flg = (int)hexdec(substr($hex, 6, 2));
+  // remove headers
+  $hex = substr($hex, 20);
+  $ret = '';
+  if (($flg & 0x8) == 8) {
+    for ($i = 0; $i < strlen($hex); $i += 2) {
+      $value = substr($hex, $i, 2);
+      if ($value == '00') {
+        $ret = substr($hex, ($i + 2));
+        break;
+      }
+    }
+  }
+  return gzinflate(pack('H*', $ret));
 }
