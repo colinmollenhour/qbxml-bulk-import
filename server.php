@@ -198,6 +198,7 @@ class QBServ {
 $contents  </QBXMLMsgsRq>
 </QBXML>
 XML;
+    DEBUG and file_put_contents(VAR_DIR.'/sendRequestXml-'.$this->config->jobName.'.xml', $qbxml);
     return $this->_wrapResult(__FUNCTION__, $qbxml);
   }
 
