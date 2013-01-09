@@ -21,6 +21,7 @@ class QBServ {
 
   protected $fatalError;
   protected $config;
+  protected $filters = array();
 
   public function __construct()
   {
@@ -46,17 +47,27 @@ class QBServ {
         throw new Exception("Cannot read $path.");
       }
       if ( ! $this->_setStatus(null)) {
-        throw new Exception("Cannot write to status file: $path");
+        throw new Exception("Cannot write to status file for {$this->config->jobName}");
       }
-      if ( ! $this->_setStatus(null)) {
-        throw new Exception("Cannot write to status file: $path");
+
+      // Load filters
+      foreach (glob(BP.'/filters/*.php') as $file) {
+        require $file;
+        $class = substr(basename($file),0,-4);
+        $filter = new $class;
+        $this->addFilter(array($filter,'filterXml'));
       }
+
     } catch(Exception $e) {
       $this->fatalError = $e->getMessage();
     }
+
+    // Test Mode
     if (isset($_GET['test'])) {
       die('<html><body>Tests passed. Download the QWC file here: <a href="'.BASE_URL.'?qwc">qbserv.qwc</a></body></html>');
     }
+
+    // Generate QWC file
     if (isset($_GET['qwc'])) {
       if ($this->fatalError) {
         die("<h3>{$this->fatalError}</h3>");
@@ -79,6 +90,11 @@ class QBServ {
 </QBWCXML><?php
       exit;
     }
+  }
+
+  public function addFilter($filter)
+  {
+    $this->filters[] = $filter;
   }
 
   public function serverVersion($params)
@@ -160,37 +176,50 @@ class QBServ {
       file_put_contents(VAR_DIR.'/job-'.$this->config->jobName.'.version', "$params->qbXMLMajorVers.$params->qbXMLMinorVers");
     }
 
-    $status = $this->_getStatus();
-    $part = null;
-    if ( ! strlen($status)) {
-      $this->_logJobMessage('Starting job at '.date('c'));
-      $part = $this->config->start;
-    } else if (is_numeric($status)) {
-      $part = $status + 1;
+    $contents = null;
+    while ( ! $contents) {
+      $status = $this->_getStatus();
+      $part = null;
+      if ( ! strlen($status)) {
+        $this->_logJobMessage('Starting job at '.date('c'));
+        $part = $this->config->start;
+      } else if (is_numeric($status)) {
+        $part = $status + 1;
+      }
+
+      // Unrecognized status
+      if ($part === null) {
+        $this->_setLastError('Unrecognized status: '.print_r($status, true));
+        return $this->_wrapResult(__FUNCTION__, 'NoOp');
+      }
+
+      // All done!
+      if ($part > $this->config->end) {
+        $this->_logJobMessage('Completed job at '.date('c'));
+        return $this->_wrapResult(__FUNCTION__, '');
+      }
+
+      // Load the next file
+      $file = $this->_getFile($part);
+      $contents = file_get_contents($file);
+      if ( ! $contents) {
+        $this->_setLastError('Could not get file contents: '.$file);
+        return $this->_wrapResult(__FUNCTION__, 'NoOp');
+      }
+      if (substr($this->config->path, -3) == '.gz') {
+        $contents = gzdecode($contents);
+      }
+
+      // Filter the XML before import
+      foreach ($this->filters as $filter) {
+        $contents = call_user_func($filter, $contents, $this->config->jobName);
+      }
+      if ( ! $contents) {
+        debug("Skipped part $part (all elements filtered)");
+        $this->_setStatus($part);
+      }
     }
 
-    // Unrecognized status
-    if ($part === null) {
-      $this->_setLastError('Unrecognized status: '.print_r($status, true));
-      return $this->_wrapResult(__FUNCTION__, 'NoOp');
-    }
-
-    // All done!
-    if ($part > $this->config->end) {
-      $this->_logJobMessage('Completed job at '.date('c'));
-      return $this->_wrapResult(__FUNCTION__, '');
-    }
-
-    // Send a part
-    $file = $this->_getFile($part);
-    $contents = file_get_contents($file);
-    if ( ! $contents) {
-      $this->_setLastError('Could not get file contents: '.$file);
-      return $this->_wrapResult(__FUNCTION__, 'NoOp');
-    }
-    if (substr($this->config->path, -3) == '.gz') {
-      $contents = gzdecode($contents);
-    }
     $version = file_get_contents(VAR_DIR.'/job-'.$this->config->jobName.'.version');
     if ( ! $version) $version = '6.0';
     $onError = 'onError="continueOnError" responseData="includeNone"';
