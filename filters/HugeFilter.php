@@ -28,7 +28,7 @@ class HugeFilter
           if (strpos($customerName, '@')) {
             $request = FALSE;
           }
-          if ( ! isset($removedCustomers[$customerName])) {
+          else if ($customerName && ! isset($removedCustomers[$customerName])) {
             $removedCustomers[$customerName] = true;
             $removedCustomersUpdated = true;
             $request = FALSE;
@@ -46,7 +46,7 @@ class HugeFilter
         // Replace customer name in SalesReceipts
         case 'SalesReceiptAddRq':
           $customerName = "{$request->SalesReceiptAdd->CustomerRef->FullName}";
-          if ($customerName && strpos($customerName, '@') || isset($removedCustomers[$customerName])) {
+          if ($customerName && (strpos($customerName, '@') || isset($removedCustomers[$customerName]))) {
             $request->SalesReceiptAdd->CustomerRef->FullName = self::GENERIC_CUSTOMER_NAME;
             $renamed = TRUE;
           }
@@ -55,7 +55,7 @@ class HugeFilter
         // Replace customer name in CreditMemos
         case 'CreditMemoAddRq':
           $customerName = "{$request->CreditMemoAdd->CustomerRef->FullName}";
-          if ($customerName && strpos($customerName, '@') || isset($removedCustomers[$customerName])) {
+          if ($customerName && (strpos($customerName, '@') || isset($removedCustomers[$customerName]))) {
             $request->CreditMemoAdd->CustomerRef->FullName = self::GENERIC_CUSTOMER_NAME;
             $renamed = TRUE;
           }
@@ -86,7 +86,7 @@ class HugeFilter
       $contents .= trim(preg_replace('#^<\?[^?]+\?>#', '', $node->asXML()))."\n";
     }
     if ($removedCustomersUpdated) {
-      file_put_contents($removedCustomersFile, implode("\n", $removedCustomers));
+      file_put_contents($removedCustomersFile, implode("\n", array_keys($removedCustomers)));
     }
     return $contents;
   }
@@ -94,7 +94,7 @@ class HugeFilter
   public function getGenericCustomerAdd()
   {
     $xml = new SimpleXMLElement('
-    <CustomerAddRq requestID="110111">
+    <CustomerAddRq requestID="0">
       <CustomerAdd>
         <Name>'.self::GENERIC_CUSTOMER_NAME.'</Name>
         <IsActive>true</IsActive>
