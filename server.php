@@ -65,6 +65,7 @@ class QBServ {
       }
       header('Content-Disposition: attachment; filename=qbserv.qwc');
       header('Content-Type: text/xml');
+      $guid = sprintf('%04X%04X-%04X-%04X-%04X-%04X%04X%04X', mt_rand(0, 65535), mt_rand(0, 65535), mt_rand(0, 65535), mt_rand(16384, 20479), mt_rand(32768, 49151), mt_rand(0, 65535), mt_rand(0, 65535), mt_rand(0, 65535));
       ?><<?php ?>?xml version="1.0"?>
 <QBWCXML>
   <AppName>QuickBooks XML Importer</AppName>
@@ -73,8 +74,8 @@ class QBServ {
   <AppDescription>Import huge QBXML files in chunks.</AppDescription>
   <AppSupport><?= str_replace('server.php', 'README.txt', BASE_URL) ?></AppSupport>
   <UserName>username</UserName>
-  <OwnerID>{90A44FB7-33D9-4815-AC85-AC86A7E7D1EB}</OwnerID>
-  <FileID>{57F3B9B6-86F1-4FCC-B1FF-967DE1813D20}</FileID>
+  <OwnerID>{18602462-953C-4702-83AA-C07C1BF556E2}</OwnerID>
+  <FileID>{<?= $guid ?>}</FileID>
   <QBType>QBFS</QBType>
   <IsReadOnly>false</IsReadOnly>
 </QBWCXML><?php
@@ -94,7 +95,8 @@ class QBServ {
     if ($this->fatalError) {
       return $this->_wrapResult(__FUNCTION__, 'E:'.$this->fatalError);
     }
-    return $this->_wrapResult(__FUNCTION__, '');
+    $part = $this->_getStatus() ? $this->_getStatus()+1: $this->config->start;
+    return $this->_wrapResult(__FUNCTION__, "W:Connection established. Sync will start at $part of {$this->config->start}-{$this->config->end} parts.");
   }
 
   public function authenticate($params)
