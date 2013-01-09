@@ -129,7 +129,7 @@ class QBServ {
   public function getLastError($params)
   {
     $this->_checkTicket($params->ticket);
-    $errfile = VAR_DIR.'/last_error-'.$params->ticket.'.txt';
+    $errfile = VAR_DIR.'/error-'.$params->ticket.'.txt';
     if (file_exists($errfile)) {
       $err = file_get_contents($errfile);
       unlink($errfile);
@@ -190,7 +190,6 @@ class QBServ {
     if (substr($this->config->path, -3) == '.gz') {
       $contents = gzdecode($contents);
     }
-    $this->_setStatus($part);
     $onError = 'onError="continueOnError" responseData="includeNone"';
     $qbxml = <<<XML
 <?xml version="1.0" ?>
@@ -206,8 +205,7 @@ XML;
   {
     $this->_checkTicket($params->ticket);
     if ($params->hresult || $params->message) {
-      error("receiveResponseXML: $params->message ($params->hresult)");
-      $this->_setLastError("Aborting due to received response indicating Quickbooks error: $params->message");
+      $this->_setLastError("receiveResponseXML: $params->message ($params->hresult)");
       return $this->_wrapResult(__FUNCTION__, -1);
     }
 
@@ -244,10 +242,11 @@ XML;
     }
     catch (Exception $e) {
       $this->_setLastError($e->getMessage());
-      error($e->getMessage());
       return $this->_wrapResult(__FUNCTION__, $e->getCode());
     }
-    return $this->_wrapResult(__FUNCTION__, $percent);
+    $result = $this->_wrapResult(__FUNCTION__, $percent);
+    $this->_setStatus($this->_getStatus()+1);
+    return $result;
   }
 
   protected function _checkTicket($ticket)
@@ -257,7 +256,9 @@ XML;
 
   protected function _setLastError($message)
   {
-    debug("setLastError: $message");
+    $this->_logJobMessage("ERROR: $message");
+    $message = "[File {$this->_getStatus()}] $message";
+    error($message);
     $errfile = VAR_DIR.'/error-'.$this->config->jobName.'.txt';
     file_put_contents($errfile, $message) or error("Could not write to $errfile");
   }
@@ -272,7 +273,7 @@ XML;
   protected function _wrapResult($type, $result)
   {
     $response = (object) array($type.'Result' => $result);
-    debug("RESPONSE $type: ".substr(is_string($result) ? $result : json_encode($result, true),0,DEBUG?1000:300));
+    debug("RESPONSE [File {$this->_getStatus()}] $type: ".substr(is_string($result) ? $result : json_encode($result, true),0,DEBUG?1000:300));
     return $response;
   }
 
@@ -297,6 +298,7 @@ XML;
     if ($message === null) {
       return touch($file);
     }
+    $message = "[File {$this->_getStatus()}] $message\n";
     return file_put_contents($file, $message, FILE_APPEND); // TODO - keep file open until done
   }
 
