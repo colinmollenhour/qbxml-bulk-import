@@ -32,15 +32,12 @@ class QBServ {
         throw new Exception('Could not load config.txt');
       }
       $configStr = trim(file_get_contents($configPath));
-      list($jobName, $path, $start, $end) = explode('|', $configStr);
-      if ( ! strlen($jobName) || ! strlen($path) || ! strlen($start) || ! strlen($end)) {
+      if ( ! preg_match('/^\w+\|[^|]+\|\d+\|\d+$/', $configStr)) {
         throw new Exception('Could not parse config.txt. Expected format: JobName|/path/to/files*.xml|1|523');
       }
-      if ( ! preg_match('/^\w+$/', $jobName)) {
-        throw new Exception('Invalid job name: '.$jobName);
-      }
+      list($jobName, $path, $start, $end) = explode('|', $configStr);
       if ( ! strpos($path, '*')) {
-        throw new Exception('Path does not contain a replacement placeholder (*).');
+        throw new Exception('Path to files must contain a replacement placeholder (*).');
       }
       $this->config = (object) array('jobName' => $jobName, 'path' => $path, 'start' => $start, 'end' => $end);
       $path = $this->_getFile($this->config->start);
