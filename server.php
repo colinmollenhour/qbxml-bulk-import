@@ -2,6 +2,7 @@
 if (isset($_GET['pi'])) { echo phpinfo(); exit; }
 define('BP', __DIR__);
 define('VAR_DIR', __DIR__.'/var');
+define('DEBUG',0);
 
 $proto = (isset($_SERVER["HTTPS"]) && $_SERVER["HTTPS"] == "on" ? 'https' : 'http');
 $host = $_SERVER['HTTP_HOST'];
@@ -108,7 +109,7 @@ class QBServ {
     if ($this->fatalError) {
       return $this->_wrapResult(__FUNCTION__, 'FATAL ERROR: '.$this->fatalError);
     }
-    return $this->_wrapResult(__FUNCTION__, 'QBServ says goodbye!');
+    return $this->_wrapResult(__FUNCTION__, "Job completed: {$this->config->jobName}");
   }
 
   public function connectionError($params)
@@ -154,14 +155,14 @@ class QBServ {
   {
     $this->_checkTicket($params->ticket);
     if ($params->strHCPResponse) {
-      debug("New session: QBXML $params->qbXMLCountry $params->qbXMLMajorVers.$params->qbXMLMinorVers");
-      debug("strHCPResponse: $params->strHCPResponse");
-      debug("strCompanyFileName: $params->strCompanyFileName");
+      debug("New session: QBXML $params->qbXMLCountry $params->qbXMLMajorVers.$params->qbXMLMinorVers ($params->strCompanyFileName)");
+      DEBUG and debug("strHCPResponse: $params->strHCPResponse");
     }
 
     $status = $this->_getStatus();
     $part = null;
     if ( ! strlen($status)) {
+      $this->_logJobMessage('Starting job at '.date('c'));
       $part = $this->config->start;
     } else if (is_numeric($status)) {
       $part = $status + 1;
@@ -175,6 +176,7 @@ class QBServ {
 
     // All done!
     if ($part > $this->config->end) {
+      $this->_logJobMessage('Completed job at '.date('c'));
       return $this->_wrapResult(__FUNCTION__, '');
     }
 
@@ -216,7 +218,7 @@ XML;
       $percent = (($status - $this->config->start) / ($this->config->end - $this->config->start)) * 100;
       $percent = min(100,max(1, ceil($percent)));
     }
-    debug("receiveResponseXML ($percent%):\n$params->response");
+    debug("receiveResponseXML ($percent%)".(DEBUG ? ":\n$params->response" : ''));
 
     try {
       libxml_use_internal_errors(true);
@@ -234,7 +236,7 @@ XML;
       foreach ($xml->QBXMLMsgsRs->children() as $node) { /* @var $node SimpleXMLElement */
         if ($node['statusCode'] != self::STATUS_OK) {
           $errString = "{$node['requestID']} {$node['statusSeverity']} ({$node['statusCode']}): {$node['statusMessage']}\n";
-          $this->_logError($errString);
+          $this->_logJobMessage($errString);
         }
       }
     }
@@ -267,13 +269,13 @@ XML;
   protected function _wrapResult($type, $result)
   {
     $response = (object) array($type.'Result' => $result);
-    debug("RESPONSE ($type) ".print_r($response, true));
+    debug("RESPONSE ".substr(json_encode($response, true),0,500));
     return $response;
   }
 
   protected function _getStatus()
   {
-    $file = VAR_DIR.'/job-'.$this->config.'.status';
+    $file = VAR_DIR.'/job-'.$this->config->jobName.'.status';
     return file_get_contents($file);
   }
 
