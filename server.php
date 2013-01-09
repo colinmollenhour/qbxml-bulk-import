@@ -207,8 +207,15 @@ XML;
       return $this->_wrapResult(__FUNCTION__, -1);
     }
 
-    $percent = ($this->config->end - $this->config->start) / ($this->_getStatus() - $this->config->start);
-    $percent = min(100,max(1, ceil($percent)));
+    $status = (int)$this->_getStatus();
+    if ($status == $this->config->end) {
+      $percent = 100;
+    } else if ($status == $this->config->start) {
+      $percent = 1;
+    } else {
+      $percent = (($status - $this->config->start) / ($this->config->end - $this->config->start)) * 100;
+      $percent = min(100,max(1, ceil($percent)));
+    }
     debug("receiveResponseXML ($percent%):\n$params->response");
 
     try {
