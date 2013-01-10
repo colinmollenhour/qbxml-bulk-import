@@ -162,8 +162,7 @@ class HugeFilter
   {
     $xml2 = new QbSimplexmlElement('<?xml version="1.0" encoding="US-ASCII"?><'.$xml->getName().'/>');
     $xml2->populate($xml);
-    return $xml2->asXml();
-    /*return trim(preg_replace('#^<\?[^?]+\?>#', '', $xml2->asNiceXml(null,1)));*/
+    return trim(preg_replace('#^<\?[^?]+\?>#', '', $xml2->asXml()));
   }
 
 }
