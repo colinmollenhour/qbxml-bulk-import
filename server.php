@@ -109,7 +109,7 @@ class QBServ {
     if ($this->fatalError) {
       return $this->_wrapResult(__FUNCTION__, 'E:'.$this->fatalError);
     }
-    $part = $this->_getStatus() ? $this->_getStatus()+1: $this->config->start;
+    $part = strlen($this->_getStatus()) ? $this->_getStatus(): $this->config->start;
     return $this->_wrapResult(__FUNCTION__, "W:Connection established. Sync will start at $part of {$this->config->start}-{$this->config->end} parts.");
   }
 
@@ -184,7 +184,7 @@ class QBServ {
         $this->_logJobMessage('Starting job at '.date('c'));
         $part = $this->config->start;
       } else if (is_numeric($status)) {
-        $part = $status + 1;
+        $part = (int)$status;
       }
 
       // Unrecognized status
@@ -243,8 +243,8 @@ XML;
       return $this->_wrapResult(__FUNCTION__, -1);
     }
 
-    $status = (int)$this->_getStatus();
-    if ($status == $this->config->end) {
+    $status = strlen($this->_getStatus()) ? (int)$this->_getStatus() : $this->config->start;
+    if ($status >= $this->config->end) {
       $percent = 100;
     } else if ($status == $this->config->start) {
       $percent = 1;
@@ -279,7 +279,7 @@ XML;
       return $this->_wrapResult(__FUNCTION__, $e->getCode());
     }
     $result = $this->_wrapResult(__FUNCTION__, $percent);
-    $this->_setStatus($this->_getStatus()+1);
+    $this->_setStatus($this->_getStatus());
     return $result;
   }
 
@@ -314,7 +314,8 @@ XML;
   protected function _getStatus()
   {
     $file = VAR_DIR.'/job-'.$this->config->jobName.'.status';
-    return file_get_contents($file);
+    $status = trim(file_get_contents($file));
+    return strlen($status) ? ($status+1) : '';
   }
 
   protected function _setStatus($status)
