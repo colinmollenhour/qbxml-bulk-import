@@ -2,7 +2,7 @@
 if (isset($_GET['pi'])) { echo phpinfo(); exit; }
 define('BP', __DIR__);
 define('VAR_DIR', __DIR__.'/var');
-define('DEBUG',0);
+define('DEBUG',1);
 
 $proto = (isset($_SERVER["HTTPS"]) && $_SERVER["HTTPS"] == "on" ? 'https' : 'http');
 $host = $_SERVER['HTTP_HOST'];
@@ -201,14 +201,13 @@ class QBServ {
 
       // Load the next file
       $file = $this->_getFile($part);
-      $contents = file_get_contents($file);
-      if ( ! $contents) {
+      ob_start();
+      if ( ! readgzfile($file)) {
+        ob_end_clean();
         $this->_setLastError('Could not get file contents: '.$file);
         return $this->_wrapResult(__FUNCTION__, 'NoOp');
       }
-      if (substr($this->config->path, -3) == '.gz') {
-        $contents = gzdecode($contents);
-      }
+      $contents = ob_get_clean();
 
       // Filter the XML before import
       try {
@@ -224,13 +223,12 @@ class QBServ {
         $this->_setStatus($part);
       }
     }
-    $contents = qbxmlencode($contents);
 
     $version = file_get_contents(VAR_DIR.'/job-'.$this->config->jobName.'.version');
     if ( ! $version) $version = '6.0';
     $onError = 'onError="continueOnError" responseData="includeNone"';
     $qbxml = <<<XML
-<?xml version="1.0" encoding="WINDOWS-1252"?>
+<?xml version="1.0"?>
 <?qbxml version="$version"?>
 <QBXML>
   <QBXMLMsgsRq $onError>
@@ -356,31 +354,4 @@ try {
 } catch (Exception $e) {
   echo $e->getMessage();
   error("{$e->getMessage()}\n$e");
-}
-
-function gzdecode($data) {
-  // check if filename field is set in FLG, is 4th byte
-  $hex = bin2hex($data);
-  $flg = (int)hexdec(substr($hex, 6, 2));
-  // remove headers
-  $hex = substr($hex, 20);
-  $ret = '';
-  if (($flg & 0x8) == 8) {
-    for ($i = 0; $i < strlen($hex); $i += 2) {
-      $value = substr($hex, $i, 2);
-      if ($value == '00') {
-        $ret = substr($hex, ($i + 2));
-        break;
-      }
-    }
-  }
-  return gzinflate(pack('H*', $ret));
-}
-function qbxmlencode($xml) {
-  static $translate;
-  if ( ! $translate) {
-    $translate = array();
-    for($i = 255; $i >= 147; $i--) $translate[iconv('WINDOWS-1252','UTF-8',chr($i))] = "&#$i;";
-  }
-  return strtr($xml, $translate);
 }

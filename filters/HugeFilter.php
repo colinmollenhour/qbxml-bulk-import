@@ -1,4 +1,5 @@
 <?php
+require __DIR__.'/../lib/QbSimplexmlElement.php';
 
 class HugeFilter
 {
@@ -15,19 +16,42 @@ class HugeFilter
     $removedCustomers = array_flip($removedCustomers);
     $removedCustomersUpdated = false;
 
-    $xml = new SimpleXMLElement('<?xml version="1.0" encoding="WINDOWS-1252"?><root>'.$contents.'</root>'); /* @var $xml SimpleXMLElement */
+    $xml = new QbSimplexmlElement('<?xml version="1.0" encoding="US-ASCII"?><root>'.$contents.'</root>'); /* @var $xml QbSimplexmlElement */
     if ( ! $xml) {
       throw new Exception('Error loading contents in SimpleXML. Check PHP error logs.');
     }
 
     $addNodes = array();
     $renamed = FALSE;
-    foreach ($xml->children() as $request) { /* @var $request SimpleXMLElement */
+    foreach ($xml->children() as $request) { /* @var $request QbSimplexmlElement */
+      $type = substr($request->getName(),0,-2);
+      $node = $request->$type; /* @var $node QbSimplexmlElement */
       switch ($request->getName())
       {
+        // Truncate names
+        case 'AccountAddRq':
+          $node->truncate('Name',31);
+          $node->truncate('ParentRef/FullName',31);
+          break;
+        case 'BillAddRq':
+          $node->truncate('VendorRef/FullName',31);
+          $node->truncate('ARAccountRef/FullName',31,true);
+          $node->truncate('RefNumber',20);
+          $node->truncate('TermsRef/FullName',31);
+          $node->truncate('ExpenseLineAdd/AccountRef/FullName',31);
+          $node->truncate('ExpenseLineAdd/CustomerRef/FullName',41);
+          $node->truncate('ExpenseLineAdd/ClassRef/FullName',31);
+          $node->truncate('ItemLineAdd/ItemRef/FullName',31);
+          $node->truncate('ItemLineAdd/CustomerRef/FullName',41);
+          $node->truncate('ItemLineAdd/ClassRef/FullName',31);
+          break;
+        case 'ClassAddRq':
+          $node->truncate('Name',31);
+          break;
+
         // Delete all customers that use email as name
         case 'CustomerAddRq':
-          $customerName = "{$request->CustomerAdd->Name}";
+          $customerName = "{$node->Name}";
           if (strpos($customerName, '@')) {
             $request = FALSE;
           }
@@ -40,26 +64,29 @@ class HugeFilter
 
         // Delete duplicate requests
         case 'ItemServiceAddRq':
-          if (isset($this->itemServices["{$request->ItemServiceAdd->Name}"])) {
+          $itemServiceName = $node->truncate('Name',31);
+          $node->truncate('ClassRef/FullName',31);
+          $node->truncate('ParentRef/FullName',31);
+          if (isset($this->itemServices[$itemServiceName])) {
             $request = FALSE;
           }
-          $this->itemServices["{$request->ItemServiceAdd->Name}"] = true;
+          $this->itemServices[$itemServiceName] = true;
           break;
 
         // Replace customer name in SalesReceipts
         case 'SalesReceiptAddRq':
-          $customerName = "{$request->SalesReceiptAdd->CustomerRef->FullName}";
+          $customerName = $node->truncate('CustomerRef/FullName',31);
           if ($customerName && (strpos($customerName, '@') || isset($removedCustomers[$customerName]))) {
-            $request->SalesReceiptAdd->CustomerRef->FullName = self::GENERIC_CUSTOMER_NAME;
+            $node->CustomerRef->FullName = self::GENERIC_CUSTOMER_NAME;
             $renamed = TRUE;
           }
           break;
 
         // Replace customer name in CreditMemos
         case 'CreditMemoAddRq':
-          $customerName = "{$request->CreditMemoAdd->CustomerRef->FullName}";
+          $customerName = $node->truncate('CustomerRef/FullName',31);
           if ($customerName && (strpos($customerName, '@') || isset($removedCustomers[$customerName]))) {
-            $request->CreditMemoAdd->CustomerRef->FullName = self::GENERIC_CUSTOMER_NAME;
+            $node->CustomerRef->FullName = self::GENERIC_CUSTOMER_NAME;
             $renamed = TRUE;
           }
           break;
@@ -86,7 +113,7 @@ class HugeFilter
     }
     $contents = '';
     foreach ($addNodes as $node) {
-      $contents .= trim(preg_replace('#^<\?[^?]+\?>#', '', $node->asXML()))."\n";
+      $contents .= '      '.$this->getXmlAscii($node)."\n";
     }
     if ($removedCustomersUpdated) {
       file_put_contents($removedCustomersFile, implode("\n", array_keys($removedCustomers)));
@@ -96,7 +123,7 @@ class HugeFilter
 
   public function getGenericCustomerAdd()
   {
-    $xml = new SimpleXMLElement('<?xml version="1.0" encoding="WINDOWS-1252"?>
+    $xml = new QbSimplexmlElement('<?xml version="1.0" encoding="US-ASCII"?>
     <CustomerAddRq requestID="0">
       <CustomerAdd>
         <Name>'.self::GENERIC_CUSTOMER_NAME.'</Name>
@@ -125,6 +152,14 @@ class HugeFilter
     </CustomerAddRq>
     ');
     return $xml;
+  }
+
+  public function getXmlAscii(SimpleXMLElement $xml)
+  {
+    $xml2 = new QbSimplexmlElement('<?xml version="1.0" encoding="US-ASCII"?><'.$xml->getName().'/>');
+    $xml2->populate($xml);
+    return $xml2->asXml();
+    /*return trim(preg_replace('#^<\?[^?]+\?>#', '', $xml2->asNiceXml(null,1)));*/
   }
 
 }
