@@ -14,6 +14,16 @@ class QbSimplexmlElement extends SimpleXMLElement
         $arr = is_array($path) ? $path : explode('/', $path);
         $last = sizeof($arr)-1;
         foreach ($arr as $i=>$nodeName) {
+            if (strpos($nodeName,'|')) {
+                $parts = explode('|',$nodeName);
+                $afterParts = array_slice($arr, $i+1);
+                foreach ($parts as $j => $part) {
+                    $newParts = $afterParts;
+                    array_unshift($newParts, $part);
+                    $this->truncate($newParts, $length, $nested);
+                }
+                return null;
+            }
             if ($last===$i) {
                 if (isset($this->$nodeName)) {
                     $value = (string)$this->$nodeName;
@@ -31,20 +41,16 @@ class QbSimplexmlElement extends SimpleXMLElement
                     }
                     return (string)$this->$nodeName;
                 }
-            } else {
-                if ($this->hasChildren()) {
-                    $childCount = 0;
-                    foreach ($this->children() as $_nodeName => $child) {
-                        if ($_nodeName == $nodeName) {
-                            $childCount++;
-                            $retVal = $child->truncate(array_slice($arr,$i+1), $length);
-                        }
-                    }
-                    if ($childCount == 1) {
-                        return $retVal;
+            } else if ($this->hasChildren()) {
+                $childCount = 0;
+                foreach ($this->children() as $_nodeName => $child) {
+                    if ($_nodeName == $nodeName) {
+                        $childCount++;
+                        $retVal = $child->truncate(array_slice($arr,$i+1), $length, $nested);
                     }
                 }
-            }
+                return ($childCount == 1 ? $retVal : null);
+            } else break;
         }
         return null;
     }

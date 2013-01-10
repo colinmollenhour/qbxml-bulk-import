@@ -31,23 +31,36 @@ class HugeFilter
         // Truncate names
         case 'AccountAddRq':
           $node->truncate('Name',31);
-          $node->truncate('ParentRef/FullName',31);
+          $node->truncate('ParentRef/FullName',31,':');
           break;
         case 'BillAddRq':
           $node->truncate('VendorRef/FullName',31);
-          $node->truncate('ARAccountRef/FullName',31,true);
+          $node->truncate('ARAccountRef/FullName',31,':');
           $node->truncate('RefNumber',20);
           $node->truncate('TermsRef/FullName',31);
-          $node->truncate('ExpenseLineAdd/AccountRef/FullName',31);
+          $node->truncate('ExpenseLineAdd/AccountRef/FullName',31,':');
           $node->truncate('ExpenseLineAdd/CustomerRef/FullName',41);
-          $node->truncate('ExpenseLineAdd/ClassRef/FullName',31);
-          $node->truncate('ItemLineAdd/ItemRef/FullName',31);
+          $node->truncate('ExpenseLineAdd/ClassRef/FullName',31,':');
+          $node->truncate('ItemLineAdd/ItemRef/FullName',31,':');
           $node->truncate('ItemLineAdd/CustomerRef/FullName',41);
-          $node->truncate('ItemLineAdd/ClassRef/FullName',31);
+          $node->truncate('ItemLineAdd/ClassRef/FullName',31,':');
           break;
         case 'ClassAddRq':
           $node->truncate('Name',31);
+          $node->truncate('ParentRef/FullName',31,':');
           break;
+        case 'CreditMemoAddRq':
+          $node->truncate('RefNumber',11);
+          $node->truncate('ClassRef/FullName',31,':');
+          $node->truncate('ARAccountRef/FullName',31,':');
+          // Replace customer name in CreditMemos
+          $customerName = $node->truncate('CustomerRef/FullName',31);
+          if ($customerName && (strpos($customerName, '@') || isset($removedCustomers[$customerName]))) {
+            $node->CustomerRef->FullName = self::GENERIC_CUSTOMER_NAME;
+            $renamed = TRUE;
+          }
+          break;
+
 
         // Delete all customers that use email as name
         case 'CustomerAddRq':
@@ -75,15 +88,6 @@ class HugeFilter
 
         // Replace customer name in SalesReceipts
         case 'SalesReceiptAddRq':
-          $customerName = $node->truncate('CustomerRef/FullName',31);
-          if ($customerName && (strpos($customerName, '@') || isset($removedCustomers[$customerName]))) {
-            $node->CustomerRef->FullName = self::GENERIC_CUSTOMER_NAME;
-            $renamed = TRUE;
-          }
-          break;
-
-        // Replace customer name in CreditMemos
-        case 'CreditMemoAddRq':
           $customerName = $node->truncate('CustomerRef/FullName',31);
           if ($customerName && (strpos($customerName, '@') || isset($removedCustomers[$customerName]))) {
             $node->CustomerRef->FullName = self::GENERIC_CUSTOMER_NAME;
