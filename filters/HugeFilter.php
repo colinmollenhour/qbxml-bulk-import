@@ -15,7 +15,10 @@ class HugeFilter
     $removedCustomers = array_flip($removedCustomers);
     $removedCustomersUpdated = false;
 
-    $xml = simplexml_load_string('<root>'.$contents.'</root>'); /* @var $xml SimpleXMLElement */
+    $xml = new SimpleXMLElement('<?xml version="1.0" encoding="WINDOWS-1252"?><root>'.$contents.'</root>'); /* @var $xml SimpleXMLElement */
+    if ( ! $xml) {
+      throw new Exception('Error loading contents in SimpleXML. Check PHP error logs.');
+    }
 
     $addNodes = array();
     $renamed = FALSE;
@@ -93,7 +96,7 @@ class HugeFilter
 
   public function getGenericCustomerAdd()
   {
-    $xml = new SimpleXMLElement('
+    $xml = new SimpleXMLElement('<?xml version="1.0" encoding="WINDOWS-1252"?>
     <CustomerAddRq requestID="0">
       <CustomerAdd>
         <Name>'.self::GENERIC_CUSTOMER_NAME.'</Name>

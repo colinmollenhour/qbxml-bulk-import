@@ -171,7 +171,7 @@ class QBServ {
   {
     $this->_checkTicket($params->ticket);
     if ($params->strHCPResponse) {
-      debug("New session: QBXML $params->qbXMLCountry $params->qbXMLMajorVers.$params->qbXMLMinorVers ($params->strCompanyFileName)");
+      debug("sendRequestXML: (New session) QBXML $params->qbXMLCountry $params->qbXMLMajorVers.$params->qbXMLMinorVers ($params->strCompanyFileName)");
       DEBUG and debug("strHCPResponse: $params->strHCPResponse");
       file_put_contents(VAR_DIR.'/job-'.$this->config->jobName.'.version', "$params->qbXMLMajorVers.$params->qbXMLMinorVers");
     }
@@ -211,20 +211,26 @@ class QBServ {
       }
 
       // Filter the XML before import
-      foreach ($this->filters as $filter) {
-        $contents = call_user_func($filter, $contents, $this->config->jobName);
+      try {
+        foreach ($this->filters as $filter) {
+          $contents = call_user_func($filter, $contents, $this->config->jobName);
+        }
+      } catch (Exception $e) {
+        $this->_setLastError('Error filtering file: '.$e->getMessage());
+        return $this->_wrapResult(__FUNCTION__, 'NoOp');
       }
       if ( ! $contents) {
         debug("Skipped part $part (all elements filtered)");
         $this->_setStatus($part);
       }
     }
+    $contents = qbxmlencode($contents);
 
     $version = file_get_contents(VAR_DIR.'/job-'.$this->config->jobName.'.version');
     if ( ! $version) $version = '6.0';
     $onError = 'onError="continueOnError" responseData="includeNone"';
     $qbxml = <<<XML
-<?xml version="1.0" ?>
+<?xml version="1.0" encoding="WINDOWS-1252"?>
 <?qbxml version="$version"?>
 <QBXML>
   <QBXMLMsgsRq $onError>
@@ -279,7 +285,7 @@ XML;
       return $this->_wrapResult(__FUNCTION__, $e->getCode());
     }
     $result = $this->_wrapResult(__FUNCTION__, $percent);
-    $this->_setStatus($this->_getStatus());
+    $this->_setStatus($status);
     return $result;
   }
 
@@ -291,7 +297,8 @@ XML;
   protected function _setLastError($message)
   {
     $this->_logJobMessage("ERROR: $message");
-    $message = "[File {$this->_getStatus()}] $message";
+    $part = strlen($this->_getStatus()) ? $this->_getStatus() : $this->config->start;
+    $message = "[File $part] $message";
     error($message);
     $errfile = VAR_DIR.'/error-'.$this->config->jobName.'.txt';
     file_put_contents($errfile, $message) or error("Could not write to $errfile");
@@ -307,7 +314,8 @@ XML;
   protected function _wrapResult($type, $result)
   {
     $response = (object) array($type.'Result' => $result);
-    debug("RESPONSE [File {$this->_getStatus()}] $type: ".substr(is_string($result) ? $result : json_encode($result, true),0,DEBUG?1000:300));
+    $part = strlen($this->_getStatus()) ? $this->_getStatus() : $this->config->start;
+    debug("RESPONSE [File $part] $type: ".substr(is_string($result) ? $result : json_encode($result, true),0,DEBUG?1000:300));
     return $response;
   }
 
@@ -333,7 +341,8 @@ XML;
     if ($message === null) {
       return touch($file);
     }
-    $message = "[File {$this->_getStatus()}] $message\n";
+    $part = strlen($this->_getStatus()) ? $this->_getStatus() : $this->config->start;
+    $message = "[File $part] $message\n";
     return file_put_contents($file, $message, FILE_APPEND); // TODO - keep file open until done
   }
 
@@ -366,4 +375,12 @@ function gzdecode($data) {
     }
   }
   return gzinflate(pack('H*', $ret));
+}
+function qbxmlencode($xml) {
+  static $translate;
+  if ( ! $translate) {
+    $translate = array();
+    for($i = 255; $i >= 147; $i--) $translate[iconv('WINDOWS-1252','UTF-8',chr($i))] = "&#$i;";
+  }
+  return strtr($xml, $translate);
 }
