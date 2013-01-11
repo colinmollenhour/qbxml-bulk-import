@@ -28,11 +28,11 @@ class HugeFilter
       $node = $request->$type; /* @var $node QbSimplexmlElement */
       switch ($request->getName())
       {
-        // Truncate names
         case 'AccountAddRq':
           $node->truncate('Name',31);
           $node->truncate('ParentRef/FullName',31,':');
           break;
+
         case 'BillAddRq':
           $node->truncate('VendorRef/FullName',31);
           $node->truncate('ARAccountRef/FullName',31,':');
@@ -45,10 +45,12 @@ class HugeFilter
           $node->truncate('ItemLineAdd/CustomerRef/FullName',41);
           $node->truncate('ItemLineAdd/ClassRef/FullName',31,':');
           break;
+
         case 'ClassAddRq':
           $node->truncate('Name',31);
           $node->truncate('ParentRef/FullName',31,':');
           break;
+
         case 'CreditMemoAddRq':
           $node->truncate('RefNumber',11);
           $node->truncate('ClassRef/FullName',31,':');
@@ -61,9 +63,8 @@ class HugeFilter
           }
           break;
 
-
-        // Delete all customers that use email as name
         case 'CustomerAddRq':
+          // Delete all customers that use email as name
           $customerName = "{$node->Name}";
           if (strpos($customerName, '@')) {
             $request = FALSE;
@@ -75,37 +76,78 @@ class HugeFilter
           }
           break;
 
-        // Delete duplicate requests
         case 'ItemServiceAddRq':
           $itemServiceName = $node->truncate('Name',31);
-          $node->truncate('ClassRef/FullName',31);
-          $node->truncate('ParentRef/FullName',31);
+          $node->truncate('ClassRef/FullName',31,':');
+          $node->truncate('ParentRef/FullName',31,':');
+          // Delete duplicate requests
           if (isset($this->itemServices[$itemServiceName])) {
             $request = FALSE;
           }
           $this->itemServices[$itemServiceName] = true;
           break;
 
-        // Replace customer name in SalesReceipts
-        case 'SalesReceiptAddRq':
-          $customerName = $node->truncate('CustomerRef/FullName',31);
-          if ($customerName && (strpos($customerName, '@') || isset($removedCustomers[$customerName]))) {
-            $node->CustomerRef->FullName = self::GENERIC_CUSTOMER_NAME;
-            $renamed = TRUE;
-          }
-          break;
-
-        // Replace customer name in JournalEntries
         case 'JournalEntryAddRq':
+          $node->truncate('RefNumber',11);
+          $node->truncate('JournalDebitLine|JournalCreditLine/AccountRef|ClassRef/FullName',31,':');
+          $node->truncate('JournalDebitLine|JournalCreditLine/EntityRef/FullName',41);
+          // Replace customer name in JournalEntries
           foreach ($request->JournalEntryAdd->children() as $child) {
             if (in_array($child->getName(), array('JournalDebitLine','JournalCreditLine'))) {
-              $customerName = "{$child->EntityRef->FullName}";
+              $customerName = $child->truncate('EntityRef/FullName',41);
               if (strpos($customerName, '@') || isset($removedCustomers[$customerName])) {
                 $child->EntityRef->FullName = self::GENERIC_CUSTOMER_NAME;
                 $renamed = TRUE;
               }
             }
           }
+          break;
+
+        case 'PurchaseOrderAddRq':
+          $node->truncate('RefNumber',11);
+          $node->truncate('VendorRef/FullName',41);
+          $node->truncate('ClassRef/FullName',31,':');
+          $node->truncate('PurchaseOrderLineAdd/ItemRef|ClassRef|OverrideItemAccountRef/FullName',31,':');
+          $node->truncate('VendorAddress|ShipAddress/Addr1|Addr2|Addr3|Addr4',41);
+          break;
+
+        case 'ReceivePaymentAddRq':
+          $node->truncate('RefNumber',20);
+          $node->truncate('ARAccountRef|DepositToAccountRef/FullName',31,':');
+          $node->truncate('AppliedToTxnAdd/DiscountAccountRef/FullName',31,':');
+          $customerName = $node->truncate('CustomerRef/FullName',41);
+          if ($customerName && (strpos($customerName, '@') || isset($removedCustomers[$customerName]))) {
+            $node->CustomerRef->FullName = self::GENERIC_CUSTOMER_NAME;
+            $renamed = TRUE;
+          }
+          break;
+
+        case 'SalesOrderAddRq':
+          $node->truncate('RefNumber',11);
+          $node->truncate('CustomerRef/FullName',41);
+          $node->truncate('ClassRef/FullName',31,':');
+          $node->truncate('TermsRef/FullName',31);
+          $node->truncate('SalesOrderLineAdd/ItemRef|ClassRef/FullName',31,':');
+          $node->truncate('BillAddress|ShipAddress/Addr1|Addr2|Addr3|Addr4',41);
+          break;
+
+        case 'SalesReceiptAddRq':
+          $node->truncate('RefNumber',11);
+          $node->truncate('CustomerRef/FullName',41);
+          $node->truncate('ClassRefDepositToAccountRef/FullName',31,':');
+          $node->truncate('SalesReceiptLineAdd/ItemRef|ClassRef|OverrideItemAccountRef/FullName',31,':');
+          $node->truncate('BillAddress|ShipAddress/Addr1|Addr2|Addr3|Addr4',41);
+          $customerName = $node->truncate('CustomerRef/FullName',41);
+          // Replace customer name in SalesReceipts
+          if ($customerName && (strpos($customerName, '@') || isset($removedCustomers[$customerName]))) {
+            $node->CustomerRef->FullName = self::GENERIC_CUSTOMER_NAME;
+            $renamed = TRUE;
+          }
+          break;
+
+        case 'VendorAddRq':
+          $node->truncate('Name|CompanyName',41);
+          $node->truncate('VendorAddress/Addr1|Addr2|Addr3|Addr4',41);
           break;
       }
       if ($request) {

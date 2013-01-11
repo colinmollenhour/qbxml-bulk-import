@@ -229,7 +229,7 @@ class QBServ {
     $onError = 'onError="continueOnError" responseData="includeNone"';
     $qbxml = <<<XML
 <?xml version="1.0"?>
-<?qbxml version="$version"?>
+<?qbxml version="2.1"?>
 <QBXML>
   <QBXMLMsgsRq $onError>
 $contents  </QBXMLMsgsRq>
