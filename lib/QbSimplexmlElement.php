@@ -33,7 +33,7 @@ class QbSimplexmlElement extends SimpleXMLElement
                             foreach($parts as $j => $part) {
                                 $parts[$j] = substr($part,0,$length);
                             }
-                            $this-$nodeName = implode($nested,$parts);
+                            $this->$nodeName = implode($nested,$parts);
                         }
                         else {
                             $this->$nodeName = substr($value,0,$length);
